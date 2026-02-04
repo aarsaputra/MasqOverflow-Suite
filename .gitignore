@@ -1,0 +1,14 @@
+# Exclude sensitive reports
+reports/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual Environments
+venv/
+env/
+.env
+
+# System files
+.DS_Store

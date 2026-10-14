@@ -12,22 +12,56 @@
 ```
 
 ## 📜 Description
-**MasqOverflow-Suite Enterprise** is an advanced offensive security framework designed to exploit critical vulnerabilities in legacy **Dnsmasq v2.51** deployments. It implements a collection of known CVEs discovered by Google Security Research and JSOF, enhanced with **Multi-Threading**, **ASLR Leak Primitives**, and **ROP Chain** capabilities.
+**MasqOverflow-Suite** is an offensive security framework for assessing legacy
+**Dnsmasq** deployments (tested against v2.51). It implements proof-of-concept
+vectors for several publicly disclosed CVEs (Google Security Research, JSOF),
+with multi-threading and a configurable delivery model.
 
-**⚠️ DISCLAIMER:** This tool is for **EDUCATIONAL PURPOSES and AUTHORIZED PENETRATION TESTING ONLY**. Do not use against targets without explicit permission.
+**⚠️ DISCLAIMER:** For **EDUCATIONAL PURPOSES and AUTHORIZED PENETRATION TESTING ONLY**. Do not use against targets without explicit permission.
 
-## 🚀 Enterprise Features
-- **[NEW] Multi-Threaded Spraying**: High-speed payload delivery for maximum heap corruption probability.
-- **[NEW] ASLR/Info Leak**: Implements CVE-2015-3294 variant to leak `libc` base address.
-- **[NEW] Stealth Mode**: Packet fragmentation engine to bypass simple IDS/WAF signatures.
-- **[NEW] ROP Chain Engine**: Dynamic ROP gadget construction for specific architectures.
-- **Core Exploits**:
-    - **CVE-2017-14491**: Heap Buffer Overflow (DNS Response).
+## ⚠️ Status & Scope (read before trusting any result)
+
+**Verified working:**
+- Delivery of the CVE-2017-14491 malformed DNS reply via an attacker-controlled
+  DNS server + cache priming (verified byte-identical to Google's reference PoC,
+  2261 bytes) — see `--help`/option 1.
+
+**Not verified / do not claim as results:**
+- **RCE is NOT demonstrated.** No offset is validated for any real target; the
+  libc offsets in `ARCH_PRESETS` are PLACEHOLDERS (see below). Option 9 only
+  *constructs and sends* a chain; it does not prove code execution.
+- The "ASLR leak" (CVE-2015-3294) is a **heuristic**: it flags any ≥50-byte
+  response as a possible leak and any pointer-looking word as a libc pointer.
+  No validation. Treat its "calculated libc base" as a guess.
+- The IPV6 RA / DHCPv6 vectors require IPv6 enabled on the target and (for
+  DHCPv6) an IPv6 `dhcp-range`; they will simply fail otherwise.
+- **Crash semantics:** "target stopped responding" is NOT proof of a crash.
+  The tool prints INCONCLUSIVE when its probe cannot run (e.g. without root).
+
+## 🔧 PLACEHOLDER values you MUST replace before use
+
+These are illustrative, NOT target-ready. Calibrate per target (firmware
+extraction + Ghidra/GDB — see `reports/offset_discovery.md`):
+
+| Constant | Where | Status |
+| :--- | :--- | :--- |
+| `ARCH_PRESETS[*]["system" / "pop_rdi" / "bin_sh"]` | masq_overflow.py | **PLACEHOLDER** — not from any real binary |
+| `ARCH_PRESETS[*]["leak_offset"]` (0x21bf67) | masq_overflow.py | **PLACEHOLDER** — valid only for one Android hotspot build |
+| `ARCH_PRESETS[*]["fallback_base"]` | masq_overflow.py | **PLACEHOLDER** — brute-forcing 32-bit ASLR is infeasible (1:4e9) |
+
+## 🚀 Features
+- **[v3] Attacker-DNS delivery** for CVE-2017-14491 (the correct model).
+- **Multi-Threaded Spraying**: parallel payload delivery (note: more packets ≠
+  more reliability; the 14491 crash is non-deterministic).
+- **Stealth Mode**: UDP/TCP fragmentation toggle (evades naive IDS only — not a
+  guarantee).
+- **Core vectors**:
+    - **CVE-2017-14491**: Heap Buffer Overflow (DNS Response) — *delivery verified*.
     - **CVE-2017-14492**: IPv6 Router Advertisement Heap Overflow.
     - **CVE-2017-14493**: Stack Buffer Overflow (DHCPv6).
-    - **CVE-2015-3294**: Malformed TCP Packet (Info Leak / DoS).
-    - **DNSpooq**: Cache Poisoning Assessment.
-    - **TCP Exhaustion**: Architectural DoS with File Descriptor limit bypass.
+    - **CVE-2015-3294**: Malformed TCP Packet (Info Leak / DoS) — *heuristic*.
+    - **DNSpooq** (CVE-2020-25684/5/6): Cache Poisoning race.
+    - **TCP Exhaustion / Heavy DoS**: Architectural resource exhaustion.
 
 ## 📦 Installation
 
@@ -77,25 +111,34 @@ This tool is based on deep analysis of the following security research:
 
 ## ❓ FAQ / Troubleshooting
 
-### ❓ FAQ
-
-#### Q: Saya mendapat "Target CRASHED" saat mencoba RCE, apakah gagal?
-**A: Tidak sepenuhnya.**
-Dalam Binary Exploitation, perbedaan antara DoS (Crash) dan RCE seringkali hanya masalah milimeter di **Memory Offset**.
-1.  **DoS (Partial Success)**: Payload berhasil menimpa memory (Buffer Overflow terjadi), tapi "alamat lompatan" (Return Address) meleset, sehingga program bingung dan crash. Ini membuktikan target **VULNERABLE**.
-2.  **RCE (Full Success)**: Payload menimpa memory dengan presisi sempurna. Program "lompat" ke kode jahat kita (Shellcode/ROP).
-
-**Kesimpulan:** Jika target crash, berarti celah keamanan **ADA**. Untuk mencapai RCE stabil, diperlukan debug mendalam pada firmware router untuk mencari offset `libc_base` yang presisi.
+#### Q: Saya mendapat "Target stabil" atau "INCONCLUSIVE" pada RCE, apakah gagal?
+**A: Ya — belum terbukti berhasil.**
+DoA/crash dan RCE itu dua hal berbeda, dan tool ini **tidak** membuktikan RCE.
+1.  **INCONCLUSIVE**: probe liveness tidak bisa jalan (mis. tanpa root, raw
+    socket ditolak). Ini BUKAN crash — jalankan sebagai root lalu cek ulang.
+2.  **Target stabil**: target masih menjawab → payload tidak berefek.
+3.  **"Tidak merespons"**: indikasi DoS/crash, tapi BUKAN bukti pasti crash —
+    verifikasi lewat log/uptime target. Untuk mencapai RCE perlu offset libc
+    hasil debug firmware target (`reports/offset_discovery.md`); angka di
+    `ARCH_PRESETS` masih PLACEHOLDER.
 
 #### Q: Apa itu "DNS decompression loop detected"?
-**A:** Itu indikator BAGUS!
-Jika Anda menjalankan sniffer (seperti Wireshark/Evilimiter) dan melihat error ini, berarti payload kompresi DNS jahat (CVE-2017-14491) berhasil diproses oleh Dnsmasq target.
+**A:** Itu indikator payload kompresi DNS (CVE-2017-14491) sampai ke parser
+Dnsmasq target — artinya DELIVERY berhasil, bukan otomatis crash/RCE.
 
 #### Q: Mengapa butuh `sudo`?
-**A:** Script menggunakan `Raw Socket` untuk memalsukan IP/Header paket. OS Linux membatasi fitur ini hanya untuk user root.
+**A:** Script memakai Raw Socket + Scapy untuk memalsukan IP/header paket.
+Tanpa root, probe liveness gagal dan verdict menjadi INCONCLUSIVE (bukan crash).
 
 **Q: "Too many open files" error?**
 A: The tool attempts to auto-increase your system's `ulimit`. If it fails, run `ulimit -n 4096` manually before starting the script.
+
+#### Q: Bagaimana cara uji CVE-2017-14491 dengan benar?
+**A:** Dnsmasq hanya memproses DNS reply pada socket tempat ia MENUNGGU jawaban.
+Mengirim reply palsu langsung ke port 53 target tidak akan diproses. Model yang
+benar: jalankan DNS server milik penyerang, arahkan target untuk FORWARD ke situ
+(`server=<ip>#<port>`), lalu picu/prime query. Itulah yang dilakukan opsi 1
+(lihat `lab/` untuk testbed dnsmasq 2.51 lokal).
 
 ---
 ## ⚖️ License

@@ -12,3 +12,11 @@ env/
 
 # System files
 .DS_Store
+
+# local testbed build artifacts
+lab/dnsmasq-git/
+lab/*.log
+lab/*.out
+lab/*.pid
+lab/capture.txt
+lab/dig.out

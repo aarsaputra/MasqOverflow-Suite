@@ -19,6 +19,18 @@ with multi-threading and a configurable delivery model.
 
 **⚠️ DISCLAIMER:** For **EDUCATIONAL PURPOSES and AUTHORIZED PENETRATION TESTING ONLY**. Do not use against targets without explicit permission.
 
+**Authorized use only.** Run this **only** against your own device, a local
+testbed you built, or systems you have **explicit written authorization** to
+test. Never against third-party or shared infrastructure — a DNS/hotspot service
+you touch may serve other people. See [`SECURITY.md`](SECURITY.md).
+
+> **Note on history:** early commits in this repository (e.g. `eceb529 "Initial
+> release v2.0 Enterprise"`) contained **overstated claims** — "Enterprise RCE
+> chain", a FAQ asserting "a crash proves the vuln", and a walkthrough reporting
+> `SUCCESS: Target CRASHED (Enhanced RCE)`. Those claims were wrong and have been
+> corrected at HEAD (see Status & Scope below). Old versions remain visible in
+> git history for transparency; read them as superseded.
+
 ## ⚠️ Status & Scope (read before trusting any result)
 
 **Verified working:**
@@ -30,6 +42,10 @@ with multi-threading and a configurable delivery model.
 - **RCE is NOT demonstrated.** No offset is validated for any real target; the
   libc offsets in `ARCH_PRESETS` are PLACEHOLDERS (see below). Option 9 only
   *constructs and sends* a chain; it does not prove code execution.
+- **RCE ≠ device root.** Even if code execution were achieved, dnsmasq drops
+  privileges after binding (`setuid` to an unprivileged user) and retains only
+  `CAP_NET_ADMIN` + `CAP_NET_RAW`. The result would be code as the *dnsmasq
+  user*, not root — reaching root needs a second, separate bug this tool lacks.
 - The "ASLR leak" (CVE-2015-3294) is a **heuristic**: it flags any ≥50-byte
   response as a possible leak and any pointer-looking word as a libc pointer.
   No validation. Treat its "calculated libc base" as a guess.
@@ -85,19 +101,29 @@ sudo python3 masq_overflow.py <TARGET_IP>
 ```
 
 **Interactive Menu:**
-Once launched, you can choose from **9 Attack Vectors**:
+Once launched, you can choose from these vectors:
 
-1. `CVE-2017-14491` - Classic Heap Overflow.
+1. `CVE-2017-14491` - Heap Overflow (attacker-DNS delivery) — *delivery verified*.
 2. `CVE-2017-14492` - IPv6 RA Overflow.
 3. `CVE-2017-14493` - DHCPv6 Stack Overflow.
-4. `CVE-2015-3294` - TCP Malformed Packet (DoS).
-5. `CVE-2017-13704` - Oversized EDNS0 (Integer Overflow).
-6. `DNSpooq` - Threaded Cache Poisoning.
-7. `TCP Exhaustion` - Architectural Resource Exhaustion.
-8. `Heavy DOS` - 100MB Flood for Stress Testing.
-9. **[ENTERPRISE] Enhanced RCE Chain** (Leak + ROP + Spray).
-S. **Toggle Stealth Mode** (Frag ON/OFF).
-... and more.
+4. `CVE-2015-3294` - TCP Malformed Packet (info-leak/DoS, heuristic).
+5. `CVE-2017-13704` - Oversized EDNS0 (Integer Underflow).
+6. `DNSpooq` - Cache Poisoning race (CVE-2020-25684/5/6).
+7. `TCP Exhaustion` - resource exhaustion (DoS) **— blocked by default**.
+8. `Heavy DOS` - 100MB flood (DoS) **— blocked by default**.
+9. `ROP Chain Construction` — **[UNVERIFIED]** builds a chain from PLACEHOLDER offsets; **no RCE proof**.
+S. Toggle Stealth Mode (fragmentation ON/OFF).
+A. Change target architecture (arm32/arm64/x86).
+
+### Restricted features (opt-in required)
+
+The DoS vectors (7, 8) are disabled by default. To enable them deliberately:
+
+```bash
+MASQ_ALLOW_DOS=1 sudo python3 masq_overflow.py <TARGET_IP>   # then type YES at the prompt
+```
+
+See [`SECURITY.md`](SECURITY.md) for the rationale and authorized-use rules.
 
 ## 📚 References & Credits
 This tool is based on deep analysis of the following security research:

